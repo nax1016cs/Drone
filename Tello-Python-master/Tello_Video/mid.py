@@ -4,11 +4,27 @@ from tello_control_ui import TelloUI
 import time
 import math
 import numpy as np
+drone = tello.Tello('', 8889)
 
+def meet_id_11(remain_distance):
+	global drone
+	drone.rotate_cw(90)
+
+def meet_id_4(remain_distance):
+	global drone
+
+	# while abs(remain_distance - 60) > 10:
+
+	if remain_distance - 60 < 0:
+		drone.move_backward(0.15)
+		
+	elif remain_distance - 60 > 0:
+		drone.move_forward(0.15)
+
+	# drone.land()	
 
 def main():
-	drone = tello.Tello('', 8889)
-
+	global drone
 	time.sleep(5)
 	fs = cv2.FileStorage("data.txt", cv2.FILE_STORAGE_READ)
 	cameraMatrix = fs.getNode("intrinsic")
@@ -29,13 +45,8 @@ def main():
 			frame = cv2.aruco.drawDetectedMarkers(frame, markerCorners, markerIds)
 			rvec, tvec, _objPoints = cv2.aruco.estimatePoseSingleMarkers(markerCorners, 13.7, cameraMatrix, distCoeffs) 
 			try:
-				t_vec = tvec[0][0]
-
-				string = "x: " + str(round(t_vec[0], 3)) + ", " + "y: " + str( round(t_vec[1], 3)) + " z: " +  ", " + str( round(t_vec[2], 3))
-				cv2.putText(frame, string , (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 1, cv2.LINE_AA )
-				frame = cv2.aruco.drawAxis(frame, cameraMatrix, distCoeffs, rvec, tvec, 10)
-				
-				# get rotation matrix
+				# if rvec != None:
+				# print('rvec: ', rvec, 'tvec: ', tvec)
 				rtm = cv2.Rodrigues(rvec)
 				z = [0, 0, 1]
 				# dot product of two vec
@@ -46,47 +57,65 @@ def main():
 
 				radis = math.atan2(v[0], v[2])
 				angle = math.degrees(radis)
-				distance = 0.2
-				print('distance: ',t_vec[2] )
 
-				if np.abs(angle) > 35:
+				t_vec = tvec[0][0]
+
+				string = ("x: " + str(round(t_vec[0], 3)) + ", " + "y: " + str( round(t_vec[1], 3)) + " z: " +  ", " + str( round(t_vec[2], 3))
+						+ " angle: " +  str(angle) )
+				cv2.putText(frame, string , (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 1, cv2.LINE_AA )
+				frame = cv2.aruco.drawAxis(frame, cameraMatrix, distCoeffs, rvec, tvec, 10)
+				t_vec[1] += 15
+				
+				# get rotation matrix
+				distance = 0.3
+				print('distance: ',t_vec[2], 'y_distance: ', t_vec[1] )
+				markid = int(markerIds[0][0])
+
+				if np.abs(angle) > 20:
 					if angle > 0:
 						# drone.rotate_cw(np.abs(angle))
-						drone.rotate_cw(20)
+						drone.rotate_cw(10)
 
 						# print("rotate clockwise")
 					else:
 						# drone.rotate_ccw(np.abs(angle))
-						drone.rotate_ccw(20)
+						drone.rotate_ccw(10)
 
 						# print("rotate counter clockwise")
-				markid = int(markerIds[0][0])
 				# the foward distance
-				if t_vec[2] > 50:						
+
+				elif t_vec[1]  < -20 :
+					drone.move_up(0.2)
+
+				elif t_vec[1] > 20:
+					drone.move_down(0.2)
+
+				elif t_vec[0] < -18 :
+					drone.move_left(0.2)
+
+				elif t_vec[0] > 18:
+					drone.move_right(0.2)
+
+				elif t_vec[2] > 60:						
 					drone.move_forward(distance)
 
-				elif markid == 4:
-					# adjust the forward distance
-					while abs(t_vec[2] - 50) > 10:
-						if t_vec[2] - 50 < 0:
-							drone.move_backward(0.1)
-							
-						elif t_vec[2] - 50 > 0:
-							drone.move_forward(0.1)
-
-					# adjust the side distance
-
-					drone.land()					
-
-				elif markid == 11:
-					drone.rotate_cw(90)
+				# elif t_vec[2] < 60:						
 					# drone.land()
 
-				elif t_vec[1] < -5 :
-					drone.move_up(distance)
+				elif markid == 4:
+					if abs(t_vec[2] - 60) > 15:
+						meet_id_4(t_vec[2])
+					else:
+						drone.land()
 
-				elif t_vec[1] > -5:
-					drone.move_down(distance)
+				elif markid == 11 :
+					# remain_distance = t_vec[2]
+					meet_id_11(t_vec[2])
+					
+					# drone.land()
+
+				
+
 
 				# elif t_vec[0] > 3:
 				# 	drone.move_right(distance)
