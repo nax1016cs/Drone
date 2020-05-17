@@ -55,7 +55,7 @@ def main():
 			print("id:1 is in ", idx)
 
 			frame = cv2.aruco.drawDetectedMarkers(frame, markerCorners, markerIds)
-			rvec, tvec, _objPoints = cv2.aruco.estimatePoseSingleMarkers(markerCorners, 13.7, cameraMatrix, distCoeffs) 
+			rvec, tvec, _objPoints = cv2.aruco.estimatePoseSingleMarkers(markerCorners, 12.9, cameraMatrix, distCoeffs) 
 			try:
 				# if rvec != None:
 				print('rvec: ', rvec, 'tvec: ', tvec)

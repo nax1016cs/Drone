@@ -460,7 +460,7 @@ class Tello:
 
     def keyboard(self, key):
         print("key:", key)
-        distance = 0.9
+        distance = 0.3
         degree = 30
         if key == ord('1'):
             self.takeoff()

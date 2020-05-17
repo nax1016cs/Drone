@@ -8,8 +8,8 @@ objpoints = []
 imgpoints = []
 
 # num_pic = 1
-for i in range(1,10):
-    pic = '.\\opencv\\opencv_frame_' + str(i) + '.png'
+for i in range(1,20):
+    pic = 'opencv_frame_' + str(i) + '.jpg'
     image = cv2.imread(pic)
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
     ret, corners = cv2.findChessboardCorners(gray, size,None)
@@ -18,8 +18,7 @@ for i in range(1,10):
         corners2 = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
         imgpoints.append(corners2)
         # img = cv2.drawChessboardCorners(gray, (5,7), corners2,ret)
-print(objpoints)
-print(imgpoints)
+
 retval, cameraMatrix, distCoeffs, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, size, None, None) 
 f = cv2.FileStorage("t.txt", cv2.FILE_STORAGE_WRITE)
 f.write("intrinsic", cameraMatrix)
