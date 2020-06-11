@@ -9,6 +9,8 @@ import os
 # set the confidence and threshold
 confidence = 0.5
 threshold = 0.3
+state = 0
+finish = False
 
 # init camera-related matrix
 fs = cv2.FileStorage("data.txt", cv2.FILE_STORAGE_READ)
@@ -92,7 +94,6 @@ def detectObj(frame, name, width, height):
                 classIDs.append(classID)
     
     idxs = cv2.dnn.NMSBoxes(boxes, confidences, confidence, threshold)
-    dist = -1
     if len(idxs) > 0:
         for i in idxs.flatten():
             (x, y) = (boxes[i][0], boxes[i][1])
@@ -119,79 +120,100 @@ def detectObj(frame, name, width, height):
     return frame, dist
 
 def detect_marker(drone, frame, markerCorners, markerIds):
+    global state, finish
+    forward_dis = 60
+    print(markerIds)
+    idx = 0
+    for id_ in markerIds:
+        if (id_==1):
+            break
+        idx += 1
+    print("id:1 is in ", idx)
 
-    if len(markerCorners) > 0 and len(markerIds) != 0:
-        print(markerIds)
-        idx = 0
-        for id_ in markerIds:
-            if (id_==1):
-                break
-            idx += 1
-        print("id:1 is in ", idx)
+    frame = cv2.aruco.drawDetectedMarkers(frame, markerCorners, markerIds)
+    rvec, tvec, _objPoints = cv2.aruco.estimatePoseSingleMarkers(markerCorners, 12.9, cameraMatrix, distCoeffs) 
+    try:
+        rotv = rvec[idx][0]
+        rtm = cv2.Rodrigues( rotv )
 
-        frame = cv2.aruco.drawDetectedMarkers(frame, markerCorners, markerIds)
-        rvec, tvec, _objPoints = cv2.aruco.estimatePoseSingleMarkers(markerCorners, 12.9, cameraMatrix, distCoeffs) 
-        try:
-            rotv = rvec[idx][0]
-            rtm = cv2.Rodrigues( rotv )
+        z = [0, 0, 1]
+        # dot product of two vec
+        v = -np.dot(np.array(rtm[0]), np.array(z))
 
-            z = [0, 0, 1]
-            # dot product of two vec
-            v = -np.dot(np.array(rtm[0]), np.array(z))
+        # project to xz plane
+        v[1] = 0
 
-            # project to xz plane
-            v[1] = 0
+        radis = math.atan2(v[0], v[2])
+        angle = math.degrees(radis)
 
-            radis = math.atan2(v[0], v[2])
-            angle = math.degrees(radis)
+        t_vec = list(tvec[0][0])
+        t_vec[1] += 18
+        t_vec[0] -= 6
 
-            t_vec = list(tvec[0][0])
-            t_vec[1] += 18
-            t_vec[0] -= 6
+        string = ("x: " + str(round(t_vec[0], 3)) + ", " + "y: " + str( round(t_vec[1], 3)) + " z: " +  ", " + str( round(t_vec[2], 3))
+                + " angle: " +  str(angle))
+        cv2.putText(frame, string , (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 1, cv2.LINE_AA )
+        frame = cv2.aruco.drawAxis(frame, cameraMatrix, distCoeffs, rvec, tvec, 10)
 
-            string = ("x: " + str(round(t_vec[0], 3)) + ", " + "y: " + str( round(t_vec[1], 3)) + " z: " +  ", " + str( round(t_vec[2], 3))
-                    + " angle: " +  str(angle))
-            cv2.putText(frame, string , (10,40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 1, cv2.LINE_AA )
-            frame = cv2.aruco.drawAxis(frame, cameraMatrix, distCoeffs, rvec, tvec, 10)
+        print('distance: ',t_vec[2], 'y_distance: ', t_vec[1] ,'x_distance: ', t_vec[0])
+        markid = int(markerIds[0][idx])
+        distance = 0.2
+        thre = 10
 
-            print('distance: ',t_vec[2], 'y_distance: ', t_vec[1] ,'x_distance: ', t_vec[0])
-            markid = int(markerIds[0][idx])
-            distance = 0.2
-            thre = 10
+        # if (markid == 4 or markid == 11):
+        #     thre = 10
+        #     distance = 0.2
 
-            # if (markid == 4 or markid == 11):
-            #     thre = 10
-            #     distance = 0.2
+        # adjust the autopilot to the markerIds
+        if np.abs(angle) > 20:
+            if angle > 0:
+                drone.rotate_cw(18)
 
-            # adjust the autopilot to the markerIds
-            if np.abs(angle) > 20:
-                if angle > 0:
-                    drone.rotate_cw(18)
+            else:
+                drone.rotate_ccw(18)
 
-                else:
-                    drone.rotate_ccw(18)
+        elif t_vec[1]  < (-1 * thre) :
+            drone.move_up(0.2)
 
-            elif t_vec[1]  < (-1 * thre) :
-                drone.move_up(0.2)
+        elif t_vec[1] > thre:
+            drone.move_down(0.2)
 
-            elif t_vec[1] > thre:
-                drone.move_down(0.2)
+        elif t_vec[0] < (-1 * thre):
+            drone.move_left(0.2)
 
-            elif t_vec[0] < (-1 * thre):
-                drone.move_left(0.2)
+        elif t_vec[0] > thre:
+            drone.move_right(0.2)
 
-            elif t_vec[0] > thre:
-                drone.move_right(0.2)
+        elif t_vec[2] > forward_dis:                        
+            drone.move_forward(distance)
 
-            elif t_vec[2] > forward_dis:                        
-                drone.move_forward(distance)
+        if markid == 4 and t_vec[2] < forward_dis and state == 1:
+            state = 2
 
-            return True
-        except:
-            return False
-            pass
-    else: 
-        return False
+        elif markid == second_board and t_vec[2] < forward_dis and state == 2:
+            state = 3
+            drone.rotate_cw(180)
+            time.sleep(2)
+
+        elif markid == third_borad and t_vec[2] < forward_dis and state == 4:
+            drone.rotate_ccw(90)
+            state = 5
+
+        elif markid == fourth_board and t_vec[2] < forward_dis and state == 5:
+            drone.rotate_cw(90)
+            state = 6
+
+        elif markid == final_board and t_vec[2] < forward_dis and state == 6:
+            drone.land()
+            finish = True
+
+    except:
+        pass
+
+
+def show_frame(frame):
+    cv2.imshow("frame", frame)
+    key = cv2.waitKey(1)
 
 def main():
     drone = tello.Tello('', 8889)
@@ -212,55 +234,66 @@ def main():
 
     detect_mark = False
     firstin = False
+    adjust_height = True
+
+
     while(1):
         frame = drone.read()
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        
-        if detect_horse == False:
-            if firstin:
-                drone.move_up(0.4)
-                cv2.imshow("frame", frame)
-                key = cv2.waitKey(1)
-                if key == ord('1'):
-                    firstin = True
-                if key != -1:
-                    drone.keyboard(key)
-                firstin = False
-                continue
-
-            frame, dist = detectObj(frame, "horse", 20.0, 21.0)
-            if (dist < 55):
-                detect_horse = True
-                continue
-            drone.move_forward(0.3)
-            
-            cv2.imshow("frame", frame)
-            key = cv2.waitKey(1)
-            if key == ord('1'):
-                firstin = True
-            if key != -1:
-                drone.keyboard(key)
-            continue
-        elif detect_mark == False:
-            # detect marker
-            markerCorners, markerIds, rejectedCandidates = cv2.aruco.detectMarkers(frame, dictionary, parameters=parameters)
-
-            # detect_marker(frame, markerCorners, markerIds, cameraMatrix, distCoeffs)
-            time.sleep(5)
-            drone.move_right( dist1 )
-            time.sleep(5)
-            drone.move_forward( dist2 )
-            time.sleep(5)
-            drone.move_left( dist1 )            
-            time.sleep(5)
-            drone.move_forward( dist2 )
-            detect_mark = True
         cv2.imshow("frame", frame)
         key = cv2.waitKey(1)
         if key == ord('1'):
             firstin = True
+        if firstin == False:
+            continue
         if key != -1:
             drone.keyboard(key)
+
+        if state == 0:
+            if adjust_height:
+                drone.move_up(0.4)
+                adjust_height = False
+                show_frame(frame)
+                continue
+
+            frame, dist = detectObj(frame, "horse", 20.0, 21.0)
+            if (dist < 55):
+                state = 1
+                drone.move_right( dist1)
+                time.sleep(2)
+            else
+                drone.move_forward(0.3)
+            show_frame(frame)
+
+        elif state == 1 or state == 2 or state == 4 or state == 5 or state == 6:
+
+            markerCorners, markerIds, rejectedCandidates = cv2.aruco.detectMarkers(frame, dictionary, parameters=parameters)
+            if len(markerCorners) > 0 and len(markerIds) != 0:
+                detect_marker(drone, frame, markerCorners, markerIds)
+
+        elif state == 3:
+
+            drone.move_left(0.5)
+            frame, dist = detectObj(frame, "traffic light", 20.0, 21.0)
+            if dist != 999:
+                drone.rotate_ccw(360)
+                time.sleep(2)
+                drone.move_left(0.3)
+
+            # detect_marker(frame, markerCorners, markerIds, cameraMatrix, distCoeffs)
+            # time.sleep(5)
+            # drone.move_right( dist1 )
+            # time.sleep(5)
+            # drone.move_forward( dist2 )
+            # time.sleep(5)
+            # drone.move_left( dist1 )            
+            # time.sleep(5)
+            # drone.move_forward( dist2 )
+            # detect_mark = True
+
+        show_frame(frame)
+        if finish:
+            break
 
 if __name__ == "__main__":
     main()
