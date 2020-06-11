@@ -4,8 +4,12 @@ from tello_control_ui import TelloUI
 import time
 import math
 import numpy as np
-drone = tello.Tello('', 8889)
+import os
+import yolo_draw
+import threading
+from multiprocessing.pool import ThreadPool
 
+drone = tello.Tello('', 8889)
 forward_dis = 70
 
 def meet_id_11(remain_distance):
@@ -28,6 +32,8 @@ def meet_id_4(remain_distance):
 def main():
 	global drone
 	time.sleep(5)
+	pool = ThreadPool(processes=1)
+
 	fs = cv2.FileStorage("data.txt", cv2.FILE_STORAGE_READ)
 	cameraMatrix = fs.getNode("intrinsic")
 	distCoeffs = fs.getNode("distortion")
@@ -35,12 +41,15 @@ def main():
 	distCoeffs = distCoeffs.mat()
 	dictionary = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_250)
 	parameters =  cv2.aruco.DetectorParameters_create()
-	print(drone.get_battery())
 
 	while(1):
 		frame = drone.read() 
 		frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-		############
+		net, COLORS, LABELS = yolo_draw.initial()
+		async_result = pool.apply_async(yolo_draw.draw_horse, (frame, net, COLORS, LABELS))
+		frame = async_result.get()
+
+		###########
 		
 		markerCorners, markerIds, rejectedCandidates = cv2.aruco.detectMarkers(frame, dictionary, parameters=parameters)
 		
@@ -135,7 +144,7 @@ def main():
 				print(e)
 	
 		cv2.imshow("frame",frame)
-		key = cv2.waitKey(200)
+		key = cv2.waitKey(30)
 
 		if key!= -1:
 			drone.keyboard(key)
